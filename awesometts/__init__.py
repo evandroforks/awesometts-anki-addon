@@ -381,7 +381,7 @@ addon = Bundle(
         sounds=Bundle(
             # using Anki's method (used if we need to reproduce how Anki does
             # something, e.g. when Reviewer emulates {{FrontSide}})
-            anki=anki.sound.stripSounds,
+            anki=lambda text: aqt.mw.col.backend.strip_av_tags(text),
 
             # using AwesomeTTS's methods (which have access to precompiled re
             # objects, usable for everything else, e.g. when BrowserGenerator
