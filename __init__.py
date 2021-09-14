@@ -48,11 +48,11 @@ from . import awesometts  # noqa, pylint:disable=wrong-import-position
 
 awesometts.browser_menus()     # mass generator and MP3 stripper
 awesometts.cache_control()     # automatically clear the media cache regularly
-awesometts.cards_button()      # on-the-fly templater helper in card view
+# awesometts.cards_button()      # on-the-fly templater helper in card view
 awesometts.config_menu()       # provides access to configuration dialog
 awesometts.editor_button()     # single audio clip generator button
 awesometts.reviewer_hooks()    # on-the-fly playback/shortcuts, context menus
 awesometts.temp_files()        # remove temporary files upon session exit
-awesometts.window_shortcuts()  # enable/update shortcuts for add-on windows
+# awesometts.window_shortcuts()  # enable/update shortcuts for add-on windows
 awesometts.register_tts_tag()  # register AwesomeTTS "voices" for the anki {{tts}} tag
 awesometts.display_homescreen() # display AwesomeTTS welcome screen
