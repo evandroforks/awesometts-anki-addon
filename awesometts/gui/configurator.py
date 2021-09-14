@@ -22,6 +22,7 @@ from locale import format as locale
 import os
 import os.path
 from sys import platform
+import aqt.utils
 
 from PyQt5 import QtCore, QtWidgets, QtGui
 
@@ -42,12 +43,8 @@ class Configurator(Dialog):
     """Provides a dialog for configuring the add-on."""
 
     _PROPERTY_KEYS = [
-        'automatic_answers', 'automatic_answers_errors', 'automatic_questions',
-        'automatic_questions_errors', 'cache_days', 'delay_answers_onthefly',
-        'delay_answers_stored_ours', 'delay_answers_stored_theirs',
-        'delay_questions_onthefly', 'delay_questions_stored_ours',
-        'delay_questions_stored_theirs', 'ellip_note_newlines',
-        'ellip_template_newlines', 'filenames', 'filenames_human',
+        'cache_days', 'ellip_note_newlines',
+        'ellip_template_newlines', 'filenames', 'filenames_human', 'homescreen_show',
         'lame_flags', 'launch_browser_generator', 'launch_browser_stripper',
         'launch_configurator', 'launch_editor_generator', 'launch_templater',
         'otf_only_revealed_cloze', 'otf_remove_hints', 'spec_note_strip',
@@ -57,7 +54,9 @@ class Configurator(Dialog):
         'strip_note_brackets', 'strip_note_parens', 'strip_template_braces',
         'strip_template_brackets', 'strip_template_parens', 'sub_note_cloze',
         'sub_template_cloze', 'sul_note', 'sul_template', 'throttle_sleep',
-        'throttle_threshold', 'tts_key_a', 'tts_key_q', 'updates_enabled',
+        'throttle_threshold', 'plus_api_key', 'service_forvo_preferred_users',
+        'service_azure_sleep_time',
+        'strip_ruby_tags'
     ]
 
     _PROPERTY_WIDGETS = (Checkbox, QtWidgets.QComboBox, QtWidgets.QLineEdit,
@@ -93,10 +92,10 @@ class Configurator(Dialog):
         tabs = QtWidgets.QTabWidget()
 
         for content, icon, label in [
-                (self._ui_tabs_playback, 'player-time', "Playback"),
                 (self._ui_tabs_text, 'editclear', "Text"),
                 (self._ui_tabs_mp3gen, 'document-new', "MP3s"),
                 (self._ui_tabs_windows, 'kpersonalizer', "Windows"),
+                (self._ui_tabs_services, 'rating', "Services"),
                 (self._ui_tabs_advanced, 'configure', "Advanced"),
         ]:
             if use_icons:
@@ -109,77 +108,6 @@ class Configurator(Dialog):
                                              self.adjustSize()))
         return tabs
 
-    def _ui_tabs_playback(self):
-        """Returns the "Playback" tab."""
-
-        vert = QtWidgets.QVBoxLayout()
-        vert.addWidget(self._ui_tabs_playback_group(
-            'automatic_questions', 'tts_key_q',
-            'delay_questions_', "Questions / Fronts of Cards",
-        ))
-        vert.addWidget(self._ui_tabs_playback_group(
-            'automatic_answers', 'tts_key_a',
-            'delay_answers_', "Answers / Backs of Cards",
-        ))
-        vert.addSpacing(self._SPACING)
-        vert.addWidget(Label('Anki controls if and how to play [sound] '
-                             'tags. See "Help" for more information.'))
-        vert.addStretch()
-
-        tab = QtWidgets.QWidget()
-        tab.setLayout(vert)
-        return tab
-
-    def _ui_tabs_playback_group(self, automatic_key, shortcut_key,
-                                delay_key_prefix, label):
-        """
-        Returns the "Questions / Fronts of Cards" and "Answers / Backs
-        of Cards" input groups.
-        """
-
-        hor = QtWidgets.QHBoxLayout()
-        automatic = Checkbox("Automatically play on-the-fly <tts> tags",
-                             automatic_key)
-        errors = Checkbox("Show errors", automatic_key + '_errors')
-        hor.addWidget(automatic)
-        hor.addWidget(errors)
-        hor.addStretch()
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.addLayout(hor)
-
-        wait_widgets = {}
-        for subkey, desc in [('onthefly', "on-the-fly <tts> tags"),
-                             ('stored_ours', "AwesomeTTS [sound] tags"),
-                             ('stored_theirs', "other [sound] tags")]:
-            spinner = QtWidgets.QSpinBox()
-            spinner.setObjectName(delay_key_prefix + subkey)
-            spinner.setRange(0, 30)
-            spinner.setSingleStep(1)
-            spinner.setSuffix(" seconds")
-            wait_widgets[subkey] = spinner
-
-            hor = QtWidgets.QHBoxLayout()
-            hor.addWidget(Label("Wait"))
-            hor.addWidget(spinner)
-            hor.addWidget(Label("before automatically playing " + desc))
-            hor.addStretch()
-            layout.addLayout(hor)
-
-        automatic.stateChanged.connect(lambda enabled: (
-            errors.setEnabled(enabled),
-            wait_widgets['onthefly'].setEnabled(enabled),
-        ))
-
-        hor = QtWidgets.QHBoxLayout()
-        hor.addWidget(Label("To manually play on-the-fly <tts> tags, strike"))
-        hor.addWidget(self._factory_shortcut(shortcut_key))
-        hor.addStretch()
-        layout.addLayout(hor)
-
-        group = QtWidgets.QGroupBox(label)
-        group.setLayout(layout)
-        return group
 
     def _ui_tabs_text(self):
         """Returns the "Text" tab."""
@@ -274,6 +202,11 @@ class Configurator(Dialog):
             "Convert any newline(s) in input into an ellipsis",
             infix.join(['ellip', 'newlines'])
         ))
+
+        if not template_options:
+            layout.addWidget(Checkbox(
+                "Process Ruby/Furigana tags", 'strip_ruby_tags'
+            ))
 
         hor = QtWidgets.QHBoxLayout()
         hor.addWidget(Label("Strip off text within:"))
@@ -481,13 +414,59 @@ class Configurator(Dialog):
         tab.setLayout(vert)
         return tab
 
+    def _ui_tabs_services(self):
+        """Returns the "Services" tab."""
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self._ui_tabs_services_forvo())
+        layout.addWidget(self._ui_tabs_services_azure())
+        layout.addStretch()
+
+        tab = QtWidgets.QWidget()
+        tab.setLayout(layout)
+        return tab
+
+    def _ui_tabs_services_forvo(self):
+
+        ver = QtWidgets.QVBoxLayout()
+        url_label = QtWidgets.QLabel("Preferred Users (Enter a comma-separated list of preferred Forvo users)")
+        ver.addWidget(url_label)
+
+        forvo_preferred_users = QtWidgets.QLineEdit()
+        forvo_preferred_users.setObjectName('service_forvo_preferred_users')
+        forvo_preferred_users.setPlaceholderText("Enter preferred Forvo users, comma-separated")
+        ver.addWidget(forvo_preferred_users)
+
+        group = QtWidgets.QGroupBox("Forvo")
+        group.setLayout(ver)
+        return group
+
+    def _ui_tabs_services_azure(self):
+
+        ver = QtWidgets.QVBoxLayout()
+        url_label = QtWidgets.QLabel("Sleep between each request (for free API keys)")
+        ver.addWidget(url_label)
+        
+        
+        azure_sleep_time = QtWidgets.QSpinBox()
+        azure_sleep_time.setObjectName('service_azure_sleep_time')
+        azure_sleep_time.setRange(0, 10)
+        azure_sleep_time.setSuffix(" seconds")
+
+        ver.addWidget(azure_sleep_time)
+
+        group = QtWidgets.QGroupBox("Azure")
+        group.setLayout(ver)
+        return group
+
     def _ui_tabs_advanced(self):
         """Returns the "Advanced" tab."""
 
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self._ui_tabs_advanced_presets())
-        layout.addWidget(self._ui_tabs_advanced_update())
         layout.addWidget(self._ui_tabs_advanced_cache())
+        layout.addWidget(self._ui_tabs_advanced_other())
+        layout.addWidget(self._ui_tabs_advanced_plus())
         layout.addStretch()
 
         tab = QtWidgets.QWidget()
@@ -514,30 +493,6 @@ class Configurator(Dialog):
         vert.addLayout(hor)
 
         group = QtWidgets.QGroupBox("Service Presets and Groups")
-        group.setLayout(vert)
-        return group
-
-    def _ui_tabs_advanced_update(self):
-        """Returns the "Updates" input group."""
-
-        button = QtWidgets.QPushButton(QtGui.QIcon(f'{ICONS}/find.png'), "Check Now")
-        button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        button.setObjectName('updates_button')
-        button.clicked.connect(self._on_update_request)
-
-        state = Note()
-        state.setObjectName('updates_state')
-
-        hor = QtWidgets.QHBoxLayout()
-        hor.addWidget(button)
-        hor.addWidget(state)
-
-        vert = QtWidgets.QVBoxLayout()
-        vert.addWidget(Checkbox("automatically check for AwesomeTTS updates "
-                                "at start-up", 'updates_enabled'))
-        vert.addLayout(hor)
-
-        group = QtWidgets.QGroupBox("Updates")
         group.setLayout(vert)
         return group
 
@@ -577,6 +532,49 @@ class Configurator(Dialog):
         group = QtWidgets.QGroupBox("Caching")
         group.setLayout(layout)
         return group
+
+    def _ui_tabs_advanced_other(self):
+
+        ver = QtWidgets.QVBoxLayout()
+        ver.addWidget(Checkbox("Show AwesomeTTS widget on Deck Browser", 'homescreen_show'))
+
+        group = QtWidgets.QGroupBox("Other")
+        group.setLayout(ver)
+        return group
+
+    def _ui_tabs_advanced_plus(self):
+
+        ver = QtWidgets.QVBoxLayout()
+        urlLink="<a href=\"https://languagetools.anki.study/awesometts-plus?utm_campaign=atts_settings&utm_source=awesometts&utm_medium=addon\">700+ High Quality TTS voices - free trial</a>" 
+        url_label = QtWidgets.QLabel(urlLink)
+        url_label.setOpenExternalLinks(True)
+        ver.addWidget(url_label)
+
+        plus_api_key = QtWidgets.QLineEdit()
+        plus_api_key.setObjectName('plus_api_key')
+        plus_api_key.setPlaceholderText("enter your API Key")
+
+        verify_button = QtWidgets.QPushButton()
+        verify_button.setObjectName('verify_plus_api_key')
+        verify_button.setText('Verify')
+        verify_button.clicked.connect(lambda: self._on_verify_plus_api_key(verify_button, plus_api_key))
+
+        account_info_button = QtWidgets.QPushButton()
+        account_info_button.setObjectName('plus_account_info')
+        account_info_button.setText('Account Info')
+        account_info_button.clicked.connect(lambda: self._on_plus_account_info(plus_api_key, self))
+        
+        hor = QtWidgets.QHBoxLayout()
+        hor.addWidget(plus_api_key)
+        hor.addWidget(verify_button)
+        hor.addWidget(account_info_button)
+        ver.addLayout(hor)
+
+        ver.addWidget(Label('Please restart Anki after entering API key'))
+
+        group = QtWidgets.QGroupBox("AwesomeTTS Plus")
+        group.setLayout(ver)
+        return group        
 
     # Factories ##############################################################
 
@@ -672,13 +670,6 @@ class Configurator(Dialog):
 
         super(Configurator, self).accept()
 
-    def help_request(self):
-        """Launch browser to the URL for the user's current tab."""
-
-        tabs = self.findChild(QtWidgets.QTabWidget)
-        self._launch_link('config/' +
-                          tabs.tabText(tabs.currentIndex()).lower())
-
     def keyPressEvent(self, key_event):  # from PyQt5, pylint:disable=C0103
         """Assign new combo for shortcut buttons undergoing changes."""
 
@@ -758,40 +749,6 @@ class Configurator(Dialog):
 
         self._group_editor.show()
 
-    def _on_update_request(self):
-        """Attempts update request w/ add-on updates interface."""
-
-        button = self.findChild(QtWidgets.QPushButton, 'updates_button')
-        button.setEnabled(False)
-        state = self.findChild(Note, 'updates_state')
-        state.setText("Querying update server...")
-
-        def configuratorfail(exception, text="Not available by Configurator._on_update_request"):
-            state.setText("Check failed: %s" % (
-                str(exception) or "Nothing further known"
-            ))
-
-        from .updater import Updater
-        self._addon.updates.check(
-            callbacks=dict(
-                done=lambda: button.setEnabled(True),
-                fail=configuratorfail,
-                good=lambda: state.setText("No update needed at this time."),
-                need=lambda version, info: (
-                    state.setText(f"Update to {version} is available"),
-                    [updater.show()
-                     for updater in [Updater(
-                         version=version,
-                         info=info,
-                         is_manual=True,
-                         addon=self._addon,
-                         parent=(self if self.isVisible()
-                                 else self.parentWidget()),
-                     )]],
-                ),
-            ),
-        )
-
     def _on_cache_clear(self, button):
         """Attempts clear known files from cache."""
 
@@ -820,3 +777,35 @@ class Configurator(Dialog):
         button.setEnabled(False)
         self._addon.router.forget_failures()
         button.setText("forgot failures")
+
+    def _on_verify_plus_api_key(self, button, lineedit):
+        """Verify API key"""
+
+        button.setEnabled(False)
+        button.setText('Verifying..')
+        api_key = lineedit.text()
+        result = self._addon.languagetools.verify_api_key(api_key)
+        if result['key_valid'] == True:
+            button.setText('Key Valid')
+            # store api key in configuration
+            self._addon.config['plus_api_key'] = api_key
+            self._addon.languagetools.set_api_key(api_key)
+        else:
+            button.setEnabled(True)
+            button.setText('Verify')
+            aqt.utils.showCritical(result['msg'])
+
+    def _on_plus_account_info(self, lineedit, parent_dialog):
+        """Load account info"""
+
+        api_key = lineedit.text()
+        if len(api_key) == 0:
+            aqt.utils.showCritical('Please enter AwesomeTTS Plus API Key', parent=parent_dialog, title='AwesomeTTS Plus Account Info')
+            return
+        data = self._addon.languagetools.account_info(api_key)
+        lines = []
+        for key, value in data.items():
+            lines.append(f'<b>{key}</b>: {value}')
+        account_info_str = '<br/>'.join(lines)
+        aqt.utils.showInfo(account_info_str, parent=parent_dialog, title='AwesomeTTS Plus Account Info', textFormat='rich')
+

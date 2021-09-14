@@ -21,8 +21,11 @@ Add-on package initialization
 """
 
 from os.path import join
+import os
 import sys
 from time import time
+
+import PyQt5
 
 from PyQt5.QtCore import PYQT_VERSION_STR, Qt
 from PyQt5.QtGui import QKeySequence
@@ -36,10 +39,11 @@ from .config import Config
 from .player import Player
 from .router import Router
 from .text import Sanitizer
-from .updates import Updates
+from .ttsplayer import register_tts_player
+from .languagetools import LanguageTools
 
 __all__ = ['browser_menus', 'cards_button', 'config_menu', 'editor_button',
-           'reviewer_hooks', 'sound_tag_delays', 'update_checker',
+           'reviewer_hooks', 
            'window_shortcuts']
 
 
@@ -71,9 +75,9 @@ def get_platform_info():
 
     return "%s %s; %s" % (implementation, python_version, system_description)
 
-VERSION = '1.13.0-dev'
+VERSION = '1.47.0'
 
-WEB = 'https://ankiatts.appspot.com'
+WEB = 'https://github.com/AwesomeTTS/awesometts-anki-addon'
 
 AGENT = 'AwesomeTTS/%s (Anki %s; PyQt %s; %s)' % (VERSION, anki.version,
                                                   PYQT_VERSION_STR,
@@ -82,11 +86,28 @@ AGENT = 'AwesomeTTS/%s (Anki %s; PyQt %s; %s)' % (VERSION, anki.version,
 
 # Begin core class initialization and dependency setup, pylint:disable=C0103
 
-logger = Bundle(debug=lambda *a, **k: None, error=lambda *a, **k: None,
-                info=lambda *a, **k: None, warn=lambda *a, **k: None)
-# for logging output, replace `logger` with a real one, e.g.:
-# import logging as logger
-# logger.basicConfig(stream=sys.stdout, level=logger.DEBUG)
+if 'AWESOMETTS_DEBUG_LOGGING' in os.environ:
+    import logging 
+    import io
+    # on windows, some special characters can't be printed, replace them with ?
+    if not hasattr(sys, '_pytest_mode'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.detach(), sys.stdout.encoding, 'replace')
+    if os.environ['AWESOMETTS_DEBUG_LOGGING'] == 'enable':
+        logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', 
+                            datefmt='%Y%m%d-%H:%M:%S',
+                            stream=sys.stdout, 
+                            level=logging.DEBUG)
+    elif os.environ['AWESOMETTS_DEBUG_LOGGING'] == 'file':
+        filename = os.environ['AWESOMETTS_DEBUG_FILE']
+        logging.basicConfig(format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', 
+                            datefmt='%Y%m%d-%H:%M:%S',
+                            filename=filename, 
+                            level=logging.DEBUG)        
+    logger = logging.getLogger('awesometts')
+    logger.setLevel(logging.DEBUG)
+else:
+    logger = Bundle(debug=lambda *a, **k: None, error=lambda *a, **k: None,
+                    info=lambda *a, **k: None, warn=lambda *a, **k: None)
 
 sequences = {key: QKeySequence()
              for key in ['browser_generator', 'browser_stripper',
@@ -97,17 +118,7 @@ config = Config(
               table='general',
               normalize=to.normalized_ascii),
     cols=[
-        ('automaticAnswers', 'integer', True, to.lax_bool, int),
-        ('automatic_answers_errors', 'integer', True, to.lax_bool, int),
-        ('automaticQuestions', 'integer', True, to.lax_bool, int),
-        ('automatic_questions_errors', 'integer', True, to.lax_bool, int),
         ('cache_days', 'integer', 365, int, int),
-        ('delay_answers_onthefly', 'integer', 0, int, int),
-        ('delay_answers_stored_ours', 'integer', 0, int, int),
-        ('delay_answers_stored_theirs', 'integer', 0, int, int),
-        ('delay_questions_onthefly', 'integer', 0, int, int),
-        ('delay_questions_stored_ours', 'integer', 0, int, int),
-        ('delay_questions_stored_theirs', 'integer', 0, int, int),
         ('ellip_note_newlines', 'integer', False, to.lax_bool, int),
         ('ellip_template_newlines', 'integer', False, to.lax_bool, int),
         ('extras', 'text', {}, to.deserialized_dict, to.compact_json),
@@ -115,6 +126,8 @@ config = Config(
         ('filenames_human', 'text',
          '{{text}} ({{service}} {{voice}})', str, str),
         ('groups', 'text', {}, to.deserialized_dict, to.compact_json),
+        ('homescreen_last_preset', 'text', '', str, str),
+        ('homescreen_show', 'integer', True, to.lax_bool, int),
         ('lame_flags', 'text', '--quiet -q 2', str, str),
         ('last_mass_append', 'integer', True, to.lax_bool, int),
         ('last_mass_behavior', 'integer', True, to.lax_bool, int),
@@ -137,7 +150,10 @@ config = Config(
          to.nullable_key, to.nullable_int),
         ('otf_only_revealed_cloze', 'integer', False, to.lax_bool, int),
         ('otf_remove_hints', 'integer', False, to.lax_bool, int),
+        ('plus_api_key', 'text', '', str, str),
         ('presets', 'text', {}, to.deserialized_dict, to.compact_json),
+        ('service_azure_sleep_time', 'integer', 0, int, int),
+        ('service_forvo_preferred_users', 'text', '', str, str),
         ('spec_note_count', 'text', '', str, str),
         ('spec_note_count_wrap', 'integer', True, to.lax_bool, int),
         ('spec_note_ellipsize', 'text', '', str, str),
@@ -152,27 +168,22 @@ config = Config(
         ('strip_template_braces', 'integer', False, to.lax_bool, int),
         ('strip_template_brackets', 'integer', False, to.lax_bool, int),
         ('strip_template_parens', 'integer', False, to.lax_bool, int),
+        ('strip_ruby_tags', 'integer', True, to.lax_bool, int),
         ('sub_note_cloze', 'text', 'anki', str, str),
         ('sub_template_cloze', 'text', 'anki', str, str),
         ('sul_note', 'text', [], to.substitution_list, to.substitution_json),
         ('sul_template', 'text', [], to.substitution_list,
          to.substitution_json),
-        ('templater_cloze', 'integer', True, to.lax_bool, int),
-        ('templater_field', 'text', 'Front', str, str),
-        ('templater_hide', 'text', 'normal', str, str),
-        ('templater_target', 'text', 'front', str, str),
         ('throttle_sleep', 'integer', 30, int, int),
         ('throttle_threshold', 'integer', 10, int, int),
-        ('TTS_KEY_A', 'integer', Qt.Key_F4, to.nullable_key, to.nullable_int),
-        ('TTS_KEY_Q', 'integer', Qt.Key_F3, to.nullable_key, to.nullable_int),
-        ('updates_enabled', 'integer', True, to.lax_bool, int),
-        ('updates_ignore', 'text', '', str, str),
-        ('updates_postpone', 'integer', 0, int, lambda i: int(round(i))),
+        ('tts_voices', 'text', {}, to.deserialized_dict, to.compact_json),
     ],
     logger=logger,
     events=[
     ],
 )
+
+languagetools = LanguageTools(config['plus_api_key'], logger, VERSION)
 
 try:
     from aqt.sound import av_player
@@ -200,21 +211,22 @@ player = Player(
 router = Router(
     services=Bundle(
         mappings=[
-            ('abair', service.Abair),
+            ('amazon', service.Amazon),
+            ('azure', service.Azure),
             ('baidu', service.Baidu),
+            ('cambridge', service.Cambridge),
             ('collins', service.Collins),
             ('duden', service.Duden),
             ('ekho', service.Ekho),
             ('espeak', service.ESpeak),
             ('festival', service.Festival),
-            ('fluencynl', service.FluencyNl),
+            ('fptai', service.FptAi),
             ('google', service.Google),
             ('googletts', service.GoogleTTS),
-            ('howjsay', service.Howjsay),
-            ('imtranslator', service.ImTranslator),
             ('ispeech', service.ISpeech),
             ('naver', service.Naver),
-            ('neospeech', service.NeoSpeech),
+            ('naverclova', service.NaverClova),
+            ('naverclovapremium', service.NaverClovaPremium),
             ('oddcast', service.Oddcast),
             ('oxford', service.Oxford),
             ('pico2wave', service.Pico2Wave),
@@ -223,10 +235,11 @@ router = Router(
             ('sapi5js', service.SAPI5JS),
             ('say', service.Say),
             ('spanishdict', service.SpanishDict),
-            ('voicetext', service.VoiceText),
-            ('wiktionary', service.Wiktionary),
             ('yandex', service.Yandex),
             ('youdao', service.Youdao),
+            ('forvo', service.Forvo),
+            ('vocalware', service.VocalWare),
+            ('watson', service.Watson)
         ],
         dead=dict(
             ttsapicom="TTS-API.com has gone offline and can no longer be "
@@ -247,7 +260,9 @@ router = Router(
                     lame_flags=lambda: config['lame_flags'],
                     normalize=to.normalized_ascii,
                     logger=logger,
-                    ecosystem=Bundle(web=WEB, agent=AGENT)),
+                    ecosystem=Bundle(web=WEB, agent=AGENT),
+                    languagetools=languagetools,
+                    config=config),
     ),
     cache_dir=paths.CACHE,
     temp_dir=join(paths.TEMP, '_awesometts_scratch_' + str(int(time()))),
@@ -255,16 +270,8 @@ router = Router(
     config=config,
 )
 
-updates = Updates(
-    agent=AGENT,
-    endpoint='%s/api/update/%s-%s-%s' % (WEB, anki.version, sys.platform,
-                                         VERSION),
-    logger=logger,
-)
 
 STRIP_TEMPLATE_POSTHTML = [
-    ('custom_sub', 'sul_template'),
-    'html',
     'whitespace',
     'sounds_univ',
     'filenames',
@@ -274,6 +281,7 @@ STRIP_TEMPLATE_POSTHTML = [
     ('char_remove', 'spec_template_strip'),
     ('counter', 'spec_template_count', 'spec_template_count_wrap'),
     ('char_ellipsize', 'spec_template_ellipsize'),
+    ('custom_sub', 'sul_template'),
     'ellipses',
     'whitespace',
 ]
@@ -296,6 +304,8 @@ addon = Bundle(
         ),
         fail=bundlefail,
     ),
+    language=service.languages.Language,
+    languagetools=languagetools,
     logger=logger,
     paths=Bundle(cache=paths.CACHE,
                  is_link=paths.ADDON_IS_LINKED),
@@ -311,9 +321,9 @@ addon = Bundle(
         # prepopulating a modal input based on some note field, where cloze
         # placeholders are still in their unprocessed state)
         from_note=Sanitizer([
+            ('ruby_tags', 'strip_ruby_tags'),
             ('clozes_braced', 'sub_note_cloze'),
             ('newline_ellipsize', 'ellip_note_newlines'),
-            ('custom_sub', 'sul_note'),
             'html',
             'whitespace',
             'sounds_univ',
@@ -324,25 +334,20 @@ addon = Bundle(
             ('char_remove', 'spec_note_strip'),
             ('counter', 'spec_note_count', 'spec_note_count_wrap'),
             ('char_ellipsize', 'spec_note_ellipsize'),
+            ('custom_sub', 'sul_note'),
             'ellipses',
             'whitespace',
         ], config=config, logger=logger),
 
-        # for cleaning up already-processed HTML templates (e.g. on-the-fly,
-        # where cloze is marked with <span class=cloze></span> tags)
-        from_template_front=Sanitizer([
+        # clean up fields coming from templates (on the fly TTS)
+        from_template=Sanitizer([
+            ('ruby_tags', 'strip_ruby_tags'),
             ('clozes_rendered', 'sub_template_cloze'),
-            'hint_links',
-            ('hint_content', 'otf_remove_hints'),
-            ('newline_ellipsize', 'ellip_template_newlines'),
-        ] + STRIP_TEMPLATE_POSTHTML, config=config, logger=logger),
-
-        # like the previous, but for the back sides of cards
-        from_template_back=Sanitizer([
             ('clozes_revealed', 'otf_only_revealed_cloze'),
             'hint_links',
             ('hint_content', 'otf_remove_hints'),
             ('newline_ellipsize', 'ellip_template_newlines'),
+            'html',
         ] + STRIP_TEMPLATE_POSTHTML, config=config, logger=logger),
 
         # for cleaning up text from unknown sources (e.g. system clipboard);
@@ -355,8 +360,6 @@ addon = Bundle(
             ('hint_content', 'otf_remove_hints'),
             ('newline_ellipsize', 'ellip_note_newlines'),
             ('newline_ellipsize', 'ellip_template_newlines'),
-            ('custom_sub', 'sul_note'),
-            ('custom_sub', 'sul_template'),
             'html',
             'html',  # clipboards often have escaped HTML, so we run twice
             'whitespace',
@@ -372,6 +375,8 @@ addon = Bundle(
             ('counter', 'spec_template_count', 'spec_template_count_wrap'),
             ('char_ellipsize', 'spec_note_ellipsize'),
             ('char_ellipsize', 'spec_template_ellipsize'),
+            ('custom_sub', 'sul_note'),
+            ('custom_sub', 'sul_template'),
             'ellipses',
             'whitespace',
         ], config=config, logger=logger),
@@ -383,7 +388,7 @@ addon = Bundle(
         sounds=Bundle(
             # using Anki's method (used if we need to reproduce how Anki does
             # something, e.g. when Reviewer emulates {{FrontSide}})
-            anki=lambda text: aqt.mw.col.backend.strip_av_tags(text),
+            anki=anki.sound.stripSounds,
 
             # using AwesomeTTS's methods (which have access to precompiled re
             # objects, usable for everything else, e.g. when BrowserGenerator
@@ -393,7 +398,6 @@ addon = Bundle(
             univ=Sanitizer(rules=['sounds_univ', 'filenames'], logger=logger),
         ),
     ),
-    updates=updates,
     version=VERSION,
     web=WEB,
 )
@@ -565,6 +569,32 @@ def config_menu():
         parent=aqt.mw.form.menuTools,
     )
 
+    # setup AwesomeTTS resources menu
+    resources_menu = PyQt5.QtWidgets.QMenu('AwesomeTTS Resources', aqt.mw)
+    
+    def open_url_lambda(url):
+        def open_url():
+            PyQt5.QtGui.QDesktopServices.openUrl(PyQt5.QtCore.QUrl(url))
+        return open_url
+
+    links = [
+        {'name': """What's New / Updates""", 'url_path': 'updates'},
+        {'name': 'Getting Started with AwesomeTTS', 'url_path': 'tutorials/awesometts-getting-started'},
+        {'name': 'Batch Audio Generation', 'url_path': 'tutorials/awesometts-batch-generation'},
+        {'name': 'On the fly Audio', 'url_path': 'tutorials/awesometts-on-the-fly-tts'},
+        {'name': 'All Tutorials', 'url_path': 'tutorials'},
+        {'name': 'Listen to Voice Samples', 'url_path': 'languages'},
+        {'name': 'Get Access to All Voices / All Services', 'url_path': 'awesometts-plus'},
+    ]    
+    for link in links:
+        action = PyQt5.QtWidgets.QAction(link['name'], aqt.mw)
+        url_path = link['url_path']
+        url = f'https://languagetools.anki.study/{url_path}?utm_campaign=atts_resources&utm_source=awesometts&utm_medium=addon'
+        action.triggered.connect(open_url_lambda(url))
+        resources_menu.addAction(action)
+    # and add it to the tools menu
+    aqt.mw.form.menuTools.addMenu(resources_menu)
+
 
 def editor_button():
     """
@@ -572,34 +602,43 @@ def editor_button():
     which is present in the "Add" and browser windows.
     """
 
-    anki.hooks.addHook(
-        'setupEditorButtons',
-        lambda buttons, editor: gui.HTMLButton(
-            buttons, editor,
-            link_id='awesometts_btn',
-            tooltip="Record and insert an audio clip here w/ AwesomeTTS",
-            sequence=sequences['editor_generator'],
-            target=Bundle(
-                constructor=gui.EditorGenerator,
-                args=(),
-                kwargs=dict(editor=editor,
-                            addon=addon,
-                            alerts=aqt.utils.showWarning,
-                            ask=aqt.utils.getText,
-                            parent=editor.parentWindow),
-            )
-        ).buttons
-    )
+    def createAwesomeTTSEditorLambda():
+        def launch(editor):
+            editor_generator = gui.EditorGenerator(editor=editor,
+                                                   addon=addon,
+                                                   alerts=aqt.utils.showWarning,
+                                                   ask=aqt.utils.getText,
+                                                   parent=editor.parentWindow)
+            editor_generator.show()
+        return launch
 
-    anki.hooks.addHook(
-        'setupEditorShortcuts',
-        lambda shortcuts, editor: shortcuts.append(
-            (
-                sequences['editor_generator'].toString(),
-                editor._links['awesometts_btn']
-            )
-        )
-    )
+    def addAwesomeTTSEditorButton(buttons, editor):
+        cmd_string = 'awesometts_btn'
+        editor._links[cmd_string] = createAwesomeTTSEditorLambda()
+        new_button = editor._addButton(icon = gui.ICON_FILE,
+            cmd = cmd_string,
+            tip = "Record and insert an audio clip here w/ AwesomeTTS")
+        return buttons + [new_button]
+
+    anki.hooks.addHook('setupEditorButtons', addAwesomeTTSEditorButton)
+
+    def createAwesomeTTSEditorShortcutLambda(editor):
+        def launch():
+            editor_generator = gui.EditorGenerator(editor=editor,
+                                                   addon=addon,
+                                                   alerts=aqt.utils.showWarning,
+                                                   ask=aqt.utils.getText,
+                                                   parent=editor.parentWindow)
+            editor_generator.show()
+        return launch
+
+    def editor_init_shortcuts(shortcuts, editor: aqt.editor.Editor):
+        shortcut_sequence = sequences['editor_generator'].toString()
+        lambda_function = createAwesomeTTSEditorShortcutLambda(editor)
+        shortcut_entry = (shortcut_sequence, lambda_function, True)
+        shortcuts.append(shortcut_entry)
+
+    aqt.gui_hooks.editor_did_init_shortcuts.append(editor_init_shortcuts)
 
     # TODO: Editor buttons are now in the WebView, not sure how (and if)
     # we should implement muzzling. Please see:
@@ -632,46 +671,37 @@ def reviewer_hooks():
     from PyQt5.QtCore import QEvent
     from PyQt5.QtWidgets import QMenu
 
-    reviewer = gui.Reviewer(addon=addon,
-                            alerts=aqt.utils.showWarning,
-                            mw=aqt.mw)
-
-    # automatic playback
-
-    anki.hooks.addHook(
-        'showQuestion',
-        lambda: reviewer.card_handler('question', aqt.mw.reviewer.card),
-    )
-
-    anki.hooks.addHook(
-        'showAnswer',
-        lambda: reviewer.card_handler('answer', aqt.mw.reviewer.card),
-    )
-
-    # shortcut-triggered playback
-
-    reviewer_filter = gui.Filter(
-        relay=lambda event: reviewer.key_handler(
-            key_event=event,
-            state=aqt.mw.reviewer.state,
-            card=aqt.mw.reviewer.card,
-            replay_audio=aqt.mw.reviewer.replayAudio,
-        ),
-
-        when=lambda event: (aqt.mw.state == 'review' and
-                            event.type() == QEvent.KeyPress and
-                            not event.isAutoRepeat() and
-                            not event.spontaneous()),
-
-        parent=aqt.mw,  # prevents filter from being garbage collected
-    )
-
-    aqt.mw.installEventFilter(reviewer_filter)
 
     # context menu playback
 
     strip = Sanitizer([('newline_ellipsize', 'ellip_template_newlines')] +
                       STRIP_TEMPLATE_POSTHTML, config=config, logger=logger)
+
+    def say_text_preset_handler(text, preset, parent):
+        """Play the selected text using the preset."""
+
+        router(
+            svc_id=preset['service'],
+            text=text,
+            options=preset,
+            callbacks=dict(
+                okay=player.menu_click,
+                fail=lambda exception, text: (),
+            ),
+        )
+
+    def say_text_group_handler(text, group, parent):
+        """Play the selected text using the group."""
+
+        router.group(
+            text=text,
+            group=group,
+            presets=config['presets'],
+            callbacks=dict(
+                okay=player.menu_click,
+                fail=lambda exception, text: (),
+            ),
+        )    
 
     def on_context_menu(web_view, menu):
         """Populate context menu, given the context/configuration."""
@@ -684,30 +714,6 @@ def reviewer_hooks():
             atts_button = None
 
         say_text = config['presets'] and strip(web_view.selectedText())
-
-        tts_card = tts_side = None
-        tts_shortcuts = False
-        try:  # this works for web views in the reviewer and template dialog
-            if window is aqt.mw and aqt.mw.state == 'review':
-                tts_card = aqt.mw.reviewer.card
-                tts_side = aqt.mw.reviewer.state
-                tts_shortcuts = True
-            elif web_view.objectName() == 'mainText':  # card template dialog
-                parent_name = web_view.parentWidget().objectName()
-                tts_card = window.card
-                tts_side = ('question' if parent_name == 'groupBox'
-                            else 'answer' if parent_name == 'groupBox_2'
-                            else None)
-        except Exception:  # just in case, pylint:disable=broad-except
-            pass
-
-        tts_question = tts_card and tts_side and \
-            reviewer.has_tts('question', tts_card)
-        tts_answer = tts_card and tts_side == 'answer' and \
-            reviewer.has_tts('answer', tts_card)
-
-        if not (atts_button or say_text or tts_question or tts_answer):
-            return
 
         submenu = QMenu("Awesome&TTS", menu)
         submenu.setIcon(gui.ICON)
@@ -740,7 +746,7 @@ def reviewer_hooks():
                     (name, preset) = xxx_todo_changeme
                     submenu.addAction(
                         'Say "%s" w/ %s' % (say_display, name),
-                        lambda: reviewer.selection_handler(say_text,
+                        lambda: say_text_preset_handler(say_text,
                                                            preset,
                                                            window),
                     )
@@ -759,33 +765,13 @@ def reviewer_hooks():
                     (name, group) = xxx_todo_changeme1
                     submenu.addAction(
                         'Say "%s" w/ %s' % (say_display, name),
-                        lambda: reviewer.selection_handler_group(say_text,
+                        lambda: say_text_group_handler(say_text,
                                                                  group,
                                                                  window),
                     )
                 for item in sorted(config['groups'].items(),
                                    key=lambda item: item[0].lower()):
                     group_glue(item)
-
-        if tts_question or tts_answer:
-            if needs_separator:
-                submenu.addSeparator()
-
-            if tts_question:
-                submenu.addAction(
-                    "Play On-the-Fly TTS from Question Side",
-                    lambda: reviewer.nonselection_handler('question', tts_card,
-                                                          window),
-                    tts_shortcuts and config['tts_key_q'] or 0,
-                )
-
-            if tts_answer:
-                submenu.addAction(
-                    "Play On-the-Fly TTS from Answer Side",
-                    lambda: reviewer.nonselection_handler('answer', tts_card,
-                                                          window),
-                    tts_shortcuts and config['tts_key_a'] or 0,
-                )
 
         menu.addMenu(submenu)
 
@@ -794,19 +780,6 @@ def reviewer_hooks():
     anki.hooks.addHook('Reviewer.contextMenuEvent',
                        lambda reviewer, menu:
                        on_context_menu(reviewer.web, menu))
-
-
-def sound_tag_delays():
-    """
-    Enables support for the following sound delay configuration options:
-
-    - delay_questions_stored_ours (AwesomeTTS MP3s on questions)
-    - delay_questions_stored_theirs (non-AwesomeTTS MP3s on questions)
-    - delay_answers_stored_ours (AwesomeTTS MP3s on answers)
-    - delay_answers_stored_theirs (non-AwesomeTTS MP3s on answers)
-    """
-
-    anki.sound.play = player.native_wrapper
 
 
 def temp_files():
@@ -846,39 +819,6 @@ def temp_files():
     anki.hooks.addHook('unloadProfile', on_unload_profile)
 
 
-def update_checker():
-    """
-    Automatic check for new version, if neither postponed nor ignored.
-
-    With the profilesLoaded hook, we do not run the check until the user
-    is actually in a profile, which guarantees the main window has been
-    loaded. Without it, update components (e.g. aqt.downloader.download,
-    aqt.addons.GetAddons) that expect it might fail unexpectedly.
-    """
-
-    if not config['updates_enabled'] or \
-       config['updates_postpone'] and config['updates_postpone'] > time():
-        return
-
-    def on_need(version, info):
-        """If not an ignored version, pop open the updater dialog."""
-
-        if config['updates_ignore'] == version:
-            return
-
-        gui.Updater(
-            version=version,
-            info=info,
-            addon=addon,
-            parent=aqt.mw,
-        ).show()
-
-    anki.hooks.addHook(
-        'profileLoaded',
-        lambda: updates.used() or updates.check(callbacks=dict(need=on_need)),
-    )
-
-
 def window_shortcuts():
     """Enables shortcuts to launch windows."""
 
@@ -897,3 +837,16 @@ def window_shortcuts():
     on_sequence_change(config)  # set config menu if created before we ran
     config.bind(['launch_' + key for key in sequences.keys()],
                 on_sequence_change)
+
+
+def register_tts_tag():
+    register_tts_player(addon)
+
+def display_homescreen():
+    linkHandler = gui.homescreen.makeLinkHandler(addon)
+    aqt.deckbrowser.DeckBrowser._linkHandler = anki.hooks.wrap(
+        aqt.deckbrowser.DeckBrowser._linkHandler, linkHandler, "before"
+    )    
+
+    on_deckbrowser_will_render_content = gui.homescreen.makeDeckBrowserRenderContent(addon)
+    aqt.gui_hooks.deck_browser_will_render_content.append(on_deckbrowser_will_render_content)

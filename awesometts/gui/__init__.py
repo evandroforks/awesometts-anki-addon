@@ -23,9 +23,9 @@ GUI classes for AwesomeTTS
 from .common import (
     Action,
     Button,
-    HTMLButton,
     Filter,
     ICON,
+    ICON_FILE
 )
 
 from .configurator import Configurator
@@ -39,17 +39,16 @@ from .stripper import BrowserStripper
 
 from .templater import Templater
 
-from .updater import Updater
-
-from .reviewer import Reviewer
+from .homescreen import makeDeckBrowserRenderContent
+from .homescreen import makeLinkHandler
 
 __all__ = [
     # common
     'Action',
     'Button',
-    'HTMLButton',
     'Filter',
     'ICON',
+    'ICON_FILE'
 
     # dialog windows
     'Configurator',
@@ -57,8 +56,7 @@ __all__ = [
     'EditorGenerator',
     'BrowserStripper',
     'Templater',
-    'Updater',
+    'makeDeckBrowserRenderContent'
+    'makeLinkHandler'
 
-    # headless
-    'Reviewer',
 ]

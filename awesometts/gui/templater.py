@@ -24,6 +24,8 @@ from PyQt5 import QtWidgets
 
 from .base import ServiceDialog
 from .common import Checkbox, Label, Note
+import aqt.utils
+
 
 __all__ = ['Templater']
 
@@ -38,7 +40,11 @@ class Templater(ServiceDialog):
 
     HELP_USAGE_DESC = "Inserting on-the-fly playback tags into templates"
 
-    HELP_USAGE_SLUG = 'on-the-fly'
+    HELP_USAGE_SLUG = 'On-the-fly-TTS'
+
+    FIELD_TYPE_REGULAR = "regular"
+    FIELD_TYPE_CLOZE = "cloze"
+    FIELD_TYPE_CLOZE_HIDDEN = "cloze_hidden"
 
     __slots__ = [
         '_card_layout',  # reference to the card layout window
@@ -53,6 +59,7 @@ class Templater(ServiceDialog):
         from anki.consts import MODEL_CLOZE
         self._card_layout = card_layout
         self._is_cloze = card_layout.model['type'] == MODEL_CLOZE
+
 
         super(Templater, self).__init__(
             title="Add On-the-Fly TTS Tag to Template",
@@ -72,14 +79,12 @@ class Templater(ServiceDialog):
 
         layout = super(Templater, self)._ui_control()
         layout.addWidget(header)
-        layout.addWidget(Note("AwesomeTTS will speak <tts> tags as you "
-                              "review."))
+        layout.addWidget(Note("Configure TTS tag settings"))
         layout.addStretch()
         layout.addLayout(self._ui_control_fields())
         layout.addStretch()
-        layout.addWidget(Note("This feature requires desktop Anki w/ "
-                              "AwesomeTTS installed; it will not work on "
-                              "mobile apps or AnkiWeb."))
+        layout.addWidget(Note("This feature will use AwesomeTTS on Anki desktop, and will fallback to other voices (based on the selected language) " +
+        "where AwesomeTTS is not available."))
         layout.addStretch()
         layout.addWidget(self._ui_buttons())
 
@@ -93,28 +98,27 @@ class Templater(ServiceDialog):
         widgets = {}
         layout = QtWidgets.QGridLayout()
 
+        full_language_list = [(x.name, x.lang_name) for x in self._addon.language]
+        # sort by human name
+        full_language_list.sort(key=lambda x:x[1])
+
         for row, label, name, options in [
                 (0, "Field:", 'field', [
-                    ('', "customize the tag's content"),
-                ] + [
                     (field, field)
                     for field in sorted({field['name']
                                          for field
                                          in self._card_layout.model['flds']})
                 ]),
 
-                (1, "Visibility:", 'hide', [
-                    ('normal', "insert the tag as-is"),
-                    ('inline', "hide just this tag w/ inline CSS"),
-                    ('global', "add rule to hide any TTS tag for note type"),
+                (1, "Type:", 'type', [
+                    (Templater.FIELD_TYPE_REGULAR, "Regular field"),
+                    (Templater.FIELD_TYPE_CLOZE, "Cloze field: speak non-hidden parts of front, speak everything on back"),
+                    (Templater.FIELD_TYPE_CLOZE_HIDDEN, "Cloze field: hidden part only, on back side only"),
                 ]),
 
-                (2, "Add to:", 'target', [
-                    ('front', "Front Template"),
-                    ('back', "Back Template"),
-                ]),
+                (2, "Language:", 'language', full_language_list),
 
-                # row 3 is used below if self._is_cloze is True
+
         ]:
             label = Label(label)
             label.setFont(self._FONT_LABEL)
@@ -122,26 +126,6 @@ class Templater(ServiceDialog):
             widgets[name] = self._ui_control_fields_dropdown(name, options)
             layout.addWidget(label, row, 0)
             layout.addWidget(widgets[name], row, 1)
-
-        if self._is_cloze:
-            cloze = Checkbox(object_name='cloze')
-            cloze.setMinimumHeight(25)
-
-            warning = Label("Remember 'cloze:' for any cloze fields.")
-            warning.setMinimumHeight(25)
-
-            layout.addWidget(cloze, 3, 1)
-            layout.addWidget(warning, 3, 1)
-
-            widgets['field'].setCurrentIndex(-1)
-            widgets['field'].currentIndexChanged.connect(lambda index: (
-                cloze.setVisible(index),
-                cloze.setText(
-                    "%s uses cloze" %
-                    (widgets['field'].itemData(index) if index else "this")
-                ),
-                warning.setVisible(not index),
-            ))
 
         return layout
 
@@ -167,6 +151,22 @@ class Templater(ServiceDialog):
 
         return buttons
 
+    def set_button_label(self):
+        target_name = ""
+        if self.front_template_selected:
+            target_name = "Front Template"
+        elif self.back_template_selected:
+            target_name = "Back Template"        
+        self.findChild(QtWidgets.QAbstractButton, 'okay').setText("&Insert into " + target_name)
+
+    def get_target_selected(self):
+        self.front_template_selected = False
+        self.back_template_selected = False
+        if self._card_layout.tform.front_button.isChecked():
+            self.front_template_selected = True
+        if self._card_layout.tform.back_button.isChecked():
+            self.back_template_selected = True        
+
     # Events #################################################################
 
     def show(self, *args, **kwargs):
@@ -175,19 +175,19 @@ class Templater(ServiceDialog):
         field dropdown.
         """
 
+        # did we select the front or back template ?
+        self.get_target_selected()
+
+        # set the label of the insert button
+        self.set_button_label()
+
+        # if the user selected styling, exit as it doesn't make sense to insert a TTS tag there
+        if self.front_template_selected == False and self.back_template_selected == False:
+            aqt.utils.showCritical("Please Select Front Template or Back Template", title="AwesomeTTS")
+            return
+
         super(Templater, self).show(*args, **kwargs)
 
-        for name in ['hide', 'target', 'field']:
-            dropdown = self.findChild(QtWidgets.QComboBox, name)
-            dropdown.setCurrentIndex(max(
-                dropdown.findData(self._addon.config['templater_' + name]), 0
-            ))
-
-        if self._is_cloze:
-            self.findChild(Checkbox, 'cloze') \
-                .setChecked(self._addon.config['templater_cloze'])
-
-        dropdown.setFocus()  # abuses fact that 'field' is last in the loop
 
     def accept(self):
         """
@@ -195,47 +195,51 @@ class Templater(ServiceDialog):
         tag and then remembers the options.
         """
 
-        try:
-            from html import escape
-        except ImportError:
-            from cgi import escape
+        settings = self._get_all()
 
-        now = self._get_all()
+        is_group = settings['is_group']
+        preset_name = settings['preset_name']
+        group_name = settings['group_name']
+        # get language
+        language = settings['language']
+        language_enum = self._addon.language[language]        
+
+        #print(settings)
+
+        if not is_group and preset_name == None:
+            aqt.utils.showCritical("You must select a service preset", self)
+            return
+
+        # prepare the config update diff, which will be applied later
+        # need to clone the data, otherwise setting an attribute will update the cache
+        tts_voices = dict(self._addon.config['tts_voices'])
+        tts_voices[language] = {'is_group': is_group, 'preset': preset_name, 'group': group_name}
+
         tform = self._card_layout.tform
-        target = getattr(tform, now['templater_target'])
-        presets = self.findChild(QtWidgets.QComboBox, 'presets_dropdown')
+        # there's now a single edit area, as of anki 2.1.28
+        target = getattr(tform, 'edit_area')
 
-        last_service = now['last_service']
-        attrs = ([('group', last_service[6:])]
-                 if last_service.startswith('group:') else
-                 [('preset', presets.currentText())]
-                 if presets.currentIndex() > 0 else
-                 [('service', last_service)] +
-                 sorted(now['last_options'][last_service].items()))
-        if now['templater_hide'] == 'inline':
-            attrs.append(('style', 'display: none'))
-        attrs = ' '.join('%s="%s"' % (key, escape(str(value), quote=True))
-                         for key, value in attrs)
+        field_syntax = settings['field']
+        field_type = settings['type']
+        if field_type == Templater.FIELD_TYPE_CLOZE:
+            field_syntax = f"cloze:{settings['field']}"
+        elif field_type == Templater.FIELD_TYPE_CLOZE_HIDDEN:
+            field_syntax = f"cloze-only:{settings['field']}"
 
-        cloze = now.get('templater_cloze')
-        field = now['templater_field']
-        html = ('' if not field
-                else '{{cloze:%s}}' % field if cloze
-                else '{{%s}}' % field)
+        language = settings['language']
+        tag_syntax = f"tts {language} voices=AwesomeTTS:{field_syntax}"
 
-        target.setPlainText('\n'.join([target.toPlainText(),
-                                       '<tts %s>%s</tts>' % (attrs, html)]))
+        target.setPlainText('\n'.join([target.toPlainText(), '{{' + tag_syntax + '}}'] ))
 
-        if now['templater_hide'] == 'global':
-            existing_css = tform.css.toPlainText()
-            extra_css = 'tts { display: none }'
-            if existing_css.find(extra_css) < 0:
-                tform.css.setPlainText('\n'.join([
-                    existing_css,
-                    extra_css,
-                ]))
+        if is_group:
+            aqt.utils.showInfo(f"You have now associated the {language_enum.lang_name} language with the [{group_name}] group. To change this association, "+ 
+        "delete the tag and add it again.", self)
+        else:
+            aqt.utils.showInfo(f"You have now associated the {language_enum.lang_name} language with the [{preset_name}] preset. To change this association, "+ 
+        "delete the tag and add it again.", self)
 
-        self._addon.config.update(now)
+        self._addon.config['tts_voices'] = tts_voices
+
         super(Templater, self).accept()
 
     def _get_all(self):
@@ -246,19 +250,30 @@ class Templater(ServiceDialog):
 
         combos = {
             name: widget.itemData(widget.currentIndex())
-            for name in ['field', 'hide', 'target']
+            for name in ['field', 'type', 'language']
             for widget in [self.findChild(QtWidgets.QComboBox, name)]
         }
 
-        return dict(
-            list(super(Templater, self)._get_all().items()) +
-            [('templater_' + name, value) for name, value in combos.items()] +
-            (
-                [(
-                    'templater_cloze',
-                    self.findChild(Checkbox, 'cloze').isChecked(),
-                )]
-                if self._is_cloze and combos['field']
-                else []
-            )
-        )
+        presets = self.findChild(QtWidgets.QComboBox, 'presets_dropdown')
+        
+        #service
+        services = self.findChild(QtWidgets.QComboBox, 'service')
+        service_index = services.currentIndex()
+        service_id = services.itemData(service_index)
+
+        # did the user select a group ?
+        if service_id.startswith('group:'):  # we handle groups differently
+            group_name = service_id[6:]
+            combos['group_name'] = group_name
+            combos['preset_name'] = None
+            combos['is_group'] = True
+        else:
+            combos['is_group'] = False
+            combos['group_name'] = None
+            if presets.currentIndex() == 0:
+                combos['preset_name'] = None
+            else:
+                preset_name = presets.currentText()
+                combos['preset_name'] = preset_name
+
+        return combos

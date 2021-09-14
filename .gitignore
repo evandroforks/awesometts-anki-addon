@@ -8,7 +8,6 @@ __pycache__/
 *.db
 *.log
 *.py[cod]
+.vscode/
 
 /awesometts/.cache/
-anki_root
-anki_testing

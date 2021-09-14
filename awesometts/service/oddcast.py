@@ -135,8 +135,19 @@ MAPPINGS = [
     (3, 10, 1, 'CMN', 'female', "Lily"),
     (3, 10, 3, 'CMN', 'female', "Hui"),
     (3, 10, 4, 'CMN', 'male', "Liang"),
+    # Japanese
     (3, 12, 2, None, 'male', "Show"),
     (3, 12, 3, None, 'female', "Misaki"),
+    (3, 12, 4, None, 'female', "Sayaka"),
+    (3, 12, 6, None, 'female', "Haruka"),
+    (3, 12, 7, None, 'male', "Ryo"),
+    (3, 12, 8, None, 'male', "Takeru"),
+    (3, 12, 5, None, 'female', "Hikari"),
+    (7, 12, 1, None, 'female', "Himari"),
+    (7, 12, 2, None, 'male', "Kaito"),
+    (4, 12, 1, None, 'female', "Kyoko"),
+
+
     (3, 13, 1, None, 'female', "Yumi"),
     (3, 13, 2, None, 'male', "Junwoo"),
     (4, 1, 1, 'US', 'female', "Jennifer"),
@@ -198,7 +209,11 @@ MAPPINGS = [
     (4, 23, 1, None, 'male', "Mikko"),
     (4, 24, 1, None, 'female', "Lekha"),
     # outputs a ton of silence: (4, 25, 1, None, 'female', "Ragga"),
+    # Thai
     (4, 26, 1, None, 'female', "Narisa"),
+    (3, 26, 1, None, 'male', "Sarawut"),
+    (3, 26, 2, None, 'female', "Somsi"),
+
     (4, 27, 1, None, 'male', "Maged"),
     (4, 28, 1, None, 'female', "Damayanti"),
     (4, 29, 1, None, 'female', "Eszter"),
@@ -224,7 +239,10 @@ class Oddcast(Service):
     def desc(self):
         """Returns name with a voice count."""
 
-        return "Oddcast Demo (%d voices)" % len(VOICES)
+        return """NOTICE: Oddcast has asked us to remove this service, and instead provide the
+VocalWare service which has the same voices, but requires an API key. After AwesomeTTS
+1.46, the Oddcast service will be removed.
+"""
 
     def options(self):
         """Provides access to voice only."""
@@ -256,6 +274,7 @@ class Oddcast(Service):
                     for key, (_, lang_id, _, variant, gend, name)
                     in sorted(VOICES.items(), key=voice_sorter)
                 ],
+                test_default='en/steven',
                 transform=transform_voice,
             ),
         ]
@@ -263,28 +282,8 @@ class Oddcast(Service):
     def run(self, text, options, path):
         """Downloads from Oddcast directly to an MP3."""
 
-        eng_id, lang_id, vo_id, _, _, _ = VOICES[options['voice']]
+        raise ValueError(
+f"""on 2021/06/16, the OddCast team asked us to remove the Oddcast service from AwesomeTTS. Starting with AwesomeTTS 1.47, Oddcast will not be available anymore.
+As a substitute, you may sign up for the VocalWare service which is the commercial version of OddCast, but requires a subscription.
+Please email awesometts@airpost.net if you have any questions.""")
 
-        from hashlib import md5
-
-        def get_md5(subtext):
-            """Generates the filename."""
-
-            return md5(
-                (
-                    f'<engineID>{eng_id}</engineID><voiceID>{vo_id}</voiceID>'
-                    f'<langID>{lang_id}</langID><ext>mp3</ext>{subtext}'
-                ).encode()
-            ).hexdigest()
-
-        self.net_download(
-            path,
-            [
-                ('http://cache-a.oddcast.com/c_fs/%s.mp3' % get_md5(subtext),
-                 dict(engine=eng_id, language=lang_id, voice=vo_id,
-                      text=subtext, useUTF8=1))
-                for subtext in self.util_split(text, 180)  # see site maxlength
-            ],
-            require=dict(mime='audio/mpeg', size=256),
-            add_padding=True,
-        )

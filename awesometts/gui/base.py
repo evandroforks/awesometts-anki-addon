@@ -116,8 +116,14 @@ class Dialog(QtWidgets.QDialog):
         title = Label(self._title)
         title.setFont(self._FONT_TITLE)
 
-        version = Label("AwesomeTTS\nv" + self._addon.version)
-        version.setFont(self._FONT_INFO)
+        if len(self._addon.config['plus_api_key']) > 0:
+            version_str = f'AwesomeTTS <span style="color:#FF0000; font-weight: bold;">Plus</span>' +\
+                f'<br/>v{self._addon.version}'
+            version = Label(version_str)
+            version.setTextFormat(QtCore.Qt.RichText)
+        else:
+            version = Label("AwesomeTTS\nv" + self._addon.version)
+            version.setFont(self._FONT_INFO)
 
         layout = QtWidgets.QHBoxLayout()
         layout.addWidget(title)
@@ -143,45 +149,26 @@ class Dialog(QtWidgets.QDialog):
     def _ui_buttons(self):
         """
         Returns a horizontal row of standard dialog buttons, with "OK"
-        and "Cancel". If the subclass implements help_request() or
-        help_menu(), a "Help" button will also be shown.
-
-        Subclasses must call this method explicitly, at a location of
-        their choice. Once called, accept(), reject(), and optionally
-        help_request() become wired to the appropriate signals.
+        and "Cancel", and "Help", which links to AwesomeTTS Tutorials
         """
 
         buttons = QtWidgets.QDialogButtonBox()
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        buttons.helpRequested.connect(self.open_tutorials)
 
-        has_help_menu = callable(getattr(self, 'help_menu', None))
-        has_help_request = callable(getattr(self, 'help_request', None))
-
-        if has_help_menu or has_help_request:
-            if has_help_request:
-                buttons.helpRequested.connect(self.help_request)
-
-            buttons.setStandardButtons(
-                QtWidgets.QDialogButtonBox.Help |
-                QtWidgets.QDialogButtonBox.Cancel |
-                QtWidgets.QDialogButtonBox.Ok
-            )
-
-        else:
-            buttons.setStandardButtons(
-                QtWidgets.QDialogButtonBox.Cancel |
-                QtWidgets.QDialogButtonBox.Ok
-            )
+        buttons.setStandardButtons(
+            QtWidgets.QDialogButtonBox.Help |
+            QtWidgets.QDialogButtonBox.Cancel |
+            QtWidgets.QDialogButtonBox.Ok
+        )
 
         for btn in buttons.buttons():
             if buttons.buttonRole(btn) == QtWidgets.QDialogButtonBox.AcceptRole:
                 btn.setObjectName('okay')
             elif buttons.buttonRole(btn) == QtWidgets.QDialogButtonBox.RejectRole:
                 btn.setObjectName('cancel')
-            elif (buttons.buttonRole(btn) == QtWidgets.QDialogButtonBox.HelpRole
-                  and has_help_menu):
-                btn.setMenu(self.help_menu(btn))
+
 
         return buttons
 
@@ -197,15 +184,10 @@ class Dialog(QtWidgets.QDialog):
 
     # Auxiliary ##############################################################
 
-    def _launch_link(self, path):
-        """
-        Opens a URL on the AwesomeTTS website with the given path.
-        """
-
-        url = '/'.join([self._addon.web, path])
+    def open_tutorials(self):
+        url = 'https://languagetools.anki.study/tutorials?utm_campaign=atts_help&utm_source=awesometts&utm_medium=addon'
         self._addon.logger.debug("Launching %s", url)
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
-
 
 class ServiceDialog(Dialog):
     """
@@ -297,9 +279,16 @@ class ServiceDialog(Dialog):
         dropdown.activated.connect(self._on_service_activated)
         dropdown.currentIndexChanged.connect(self._on_preset_reset)
 
+        urlLink="<a href=\"https://languagetools.anki.study/awesometts-plus?utm_campaign=atts_services&utm_source=awesometts&utm_medium=addon\">700+ High Quality TTS voices - free trial</a>"
+        plus_mode_label=QtWidgets.QLabel()
+        plus_mode_label.setText(urlLink)
+        plus_mode_label.setOpenExternalLinks(True)
+
         hor = QtWidgets.QHBoxLayout()
         hor.addWidget(Label("Generate using"))
         hor.addWidget(dropdown)
+        if not self._addon.languagetools.use_plus_mode():
+            hor.addWidget(plus_mode_label)
         hor.addStretch()
 
         header = Label("Configure Service")
@@ -425,36 +414,6 @@ class ServiceDialog(Dialog):
 
         super(ServiceDialog, self).show(*args, **kwargs)
 
-    def help_menu(self, owner):
-        """
-        Returns a menu that can be attached to the Help button.
-        """
-
-        menu = QtWidgets.QMenu(owner)
-
-        help_svc = QtWidgets.QAction(menu)
-        help_svc.triggered \
-            .connect(lambda: self._launch_link('services/' + self._svc_id))
-        help_svc.setObjectName('help_svc')
-
-        try:
-            menu.addAction(
-                self.HELP_USAGE_DESC,
-                lambda: self._launch_link('usage/' + self.HELP_USAGE_SLUG),
-            )
-        except AttributeError:
-            pass
-
-        menu.addAction(help_svc)
-        menu.addAction(
-            "Managing service presets",
-            lambda: self._launch_link('usage/presets'),
-        )
-        menu.addAction(
-            "Enabling other TTS services",
-            lambda: self._launch_link('services'),
-        )
-        return menu
 
     def _on_service_activated(self, idx, initial=False, use_options=None):
         """
@@ -548,6 +507,9 @@ class ServiceDialog(Dialog):
 
             else:  # list of tuples
                 vinput = QtWidgets.QComboBox()
+                # reduce the maximum number of items displayed, in the hopes this fixes a bug on MacOSx catalina with a large number of voices
+                vinput.setMaxVisibleItems(15)
+                vinput.setStyleSheet("combobox-popup: 0;")
                 for value, text in option['values']:
                     vinput.addItem(text, value)
 
