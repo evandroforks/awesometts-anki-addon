@@ -55,4 +55,4 @@ awesometts.reviewer_hooks()    # on-the-fly playback/shortcuts, context menus
 awesometts.temp_files()        # remove temporary files upon session exit
 # awesometts.window_shortcuts()  # enable/update shortcuts for add-on windows
 awesometts.register_tts_tag()  # register AwesomeTTS "voices" for the anki {{tts}} tag
-awesometts.display_homescreen() # display AwesomeTTS welcome screen
+# awesometts.display_homescreen() # display AwesomeTTS welcome screen
