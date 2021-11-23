@@ -512,7 +512,7 @@ def cache_control():
             except:  # skip broken files, pylint:disable=bare-except
                 pass
 
-    anki.hooks.addHook('unloadProfile', on_unload_profile)
+    # anki.hooks.addHook('unloadProfile', on_unload_profile)
 
 
 def cards_button():
