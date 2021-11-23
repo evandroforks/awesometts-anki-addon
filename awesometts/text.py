@@ -54,7 +54,7 @@ RE_NEWLINEISH = re.compile(r'(\r|\n|<\s*/?\s*(br|div|p)(\s+[^>]*)?\s*/?\s*>)+',
 RE_SOUNDS = re.compile(r'\[sound:(.*?)\]')  # see also anki.sound._soundReg
 RE_WHITESPACE = re.compile(r'[\0\s]+', re.UNICODE)
 
-STRIP_HTML = anki.utils.stripHTML  # this also converts character entities
+STRIP_HTML = anki.utils.strip_html if hasattr(anki.utils, 'strip_html') else anki.utils.stripHTML  # this also converts character entities
 
 
 class Sanitizer(object):  # call only, pylint:disable=too-few-public-methods

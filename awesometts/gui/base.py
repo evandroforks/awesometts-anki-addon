@@ -133,7 +133,7 @@ class Dialog(QtWidgets.QDialog):
 
         return layout
 
-    def _ui_divider(self, orientation_style=QtWidgets.QFrame.VLine):
+    def _ui_divider(self, orientation_style=QtWidgets.QFrame.Shape.VLine):
         """
         Returns a divider.
 

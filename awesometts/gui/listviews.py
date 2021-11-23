@@ -317,8 +317,8 @@ class _ListModel(QtCore.QAbstractListModel):  # pylint:disable=R0904
         """Always return same item flags."""
         return self.flags.LIST_ITEM
 
-    flags.LIST_ITEM = (QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEditable |
-                       QtCore.Qt.ItemIsEnabled)
+    flags.LIST_ITEM = (QtCore.Qt.ItemFlag.ItemIsSelectable | QtCore.Qt.ItemFlag.ItemIsEditable |
+                       QtCore.Qt.ItemFlag.ItemIsEnabled)
 
     def rowCount(self,          # pylint:disable=invalid-name
                  parent=None):  # pylint:disable=unused-argument
@@ -364,7 +364,7 @@ class _ListModel(QtCore.QAbstractListModel):  # pylint:disable=R0904
         return True
 
     def setData(self, index, value,        # pylint:disable=C0103
-                role=QtCore.Qt.EditRole):  # pylint:disable=W0613
+                role=QtCore.Qt.ItemDataRole.EditRole):  # pylint:disable=W0613
         """Update the new value into the raw list."""
 
         self.raw_data[index.row()] = value
@@ -378,7 +378,7 @@ class _SubListModel(_ListModel):  # pylint:disable=R0904
         super(_SubListModel, self).__init__(*args, **kwargs)
         self.raw_data = [dict(obj) for obj in self.raw_data]  # deep copy
 
-    def data(self, index, role=QtCore.Qt.DisplayRole):
+    def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
         """Return display or edit data for the indexed rule."""
 
         if role == QtCore.Qt.DisplayRole:
@@ -428,7 +428,7 @@ class _GroupListModel(_ListModel):  # pylint:disable=R0904
         super(_GroupListModel, self).__init__(*args, **kwargs)
         self._presets = presets
 
-    def data(self, index, role=QtCore.Qt.DisplayRole):
+    def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
         """Return display or edit data for the indexed preset."""
 
         preset = self.raw_data[index.row()]

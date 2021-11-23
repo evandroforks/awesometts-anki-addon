@@ -65,23 +65,23 @@ def key_event_combo(event):
                      if modifiers & flag)
 
 
-key_event_combo.MOD_FLAGS = [Qt.AltModifier, Qt.ControlModifier,
-                             Qt.MetaModifier, Qt.ShiftModifier]
+key_event_combo.MOD_FLAGS = [Qt.KeyboardModifier.AltModifier, Qt.KeyboardModifier.ControlModifier,
+                             Qt.KeyboardModifier.MetaModifier, Qt.KeyboardModifier.ShiftModifier]
 
 key_event_combo.BLACKLIST = [
-    Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Backspace, Qt.Key_Backtab,
-    Qt.Key_CapsLock, Qt.Key_Control, Qt.Key_Dead_Abovedot,
-    Qt.Key_Dead_Abovering, Qt.Key_Dead_Acute, Qt.Key_Dead_Belowdot,
-    Qt.Key_Dead_Breve, Qt.Key_Dead_Caron, Qt.Key_Dead_Cedilla,
-    Qt.Key_Dead_Circumflex, Qt.Key_Dead_Diaeresis, Qt.Key_Dead_Doubleacute,
-    Qt.Key_Dead_Grave, Qt.Key_Dead_Hook, Qt.Key_Dead_Horn, Qt.Key_Dead_Iota,
-    Qt.Key_Dead_Macron, Qt.Key_Dead_Ogonek, Qt.Key_Dead_Semivoiced_Sound,
-    Qt.Key_Dead_Tilde, Qt.Key_Dead_Voiced_Sound, Qt.Key_Delete, Qt.Key_Down,
-    Qt.Key_End, Qt.Key_Enter, Qt.Key_Equal, Qt.Key_Escape, Qt.Key_Home,
-    Qt.Key_Insert, Qt.Key_Left, Qt.Key_Menu, Qt.Key_Meta, Qt.Key_Minus,
-    Qt.Key_Mode_switch, Qt.Key_NumLock, Qt.Key_PageDown, Qt.Key_PageUp,
-    Qt.Key_Plus, Qt.Key_Return, Qt.Key_Right, Qt.Key_ScrollLock, Qt.Key_Shift,
-    Qt.Key_Space, Qt.Key_Tab, Qt.Key_Underscore, Qt.Key_Up,
+    Qt.Key.Key_Alt, Qt.Key.Key_AltGr, Qt.Key.Key_Backspace, Qt.Key.Key_Backtab,
+    Qt.Key.Key_CapsLock, Qt.Key.Key_Control, Qt.Key.Key_Dead_Abovedot,
+    Qt.Key.Key_Dead_Abovering, Qt.Key.Key_Dead_Acute, Qt.Key.Key_Dead_Belowdot,
+    Qt.Key.Key_Dead_Breve, Qt.Key.Key_Dead_Caron, Qt.Key.Key_Dead_Cedilla,
+    Qt.Key.Key_Dead_Circumflex, Qt.Key.Key_Dead_Diaeresis, Qt.Key.Key_Dead_Doubleacute,
+    Qt.Key.Key_Dead_Grave, Qt.Key.Key_Dead_Hook, Qt.Key.Key_Dead_Horn, Qt.Key.Key_Dead_Iota,
+    Qt.Key.Key_Dead_Macron, Qt.Key.Key_Dead_Ogonek, Qt.Key.Key_Dead_Semivoiced_Sound,
+    Qt.Key.Key_Dead_Tilde, Qt.Key.Key_Dead_Voiced_Sound, Qt.Key.Key_Delete, Qt.Key.Key_Down,
+    Qt.Key.Key_End, Qt.Key.Key_Enter, Qt.Key.Key_Equal, Qt.Key.Key_Escape, Qt.Key.Key_Home,
+    Qt.Key.Key_Insert, Qt.Key.Key_Left, Qt.Key.Key_Menu, Qt.Key.Key_Meta, Qt.Key.Key_Minus,
+    Qt.Key.Key_Mode_switch, Qt.Key.Key_NumLock, Qt.Key.Key_PageDown, Qt.Key.Key_PageUp,
+    Qt.Key.Key_Plus, Qt.Key.Key_Return, Qt.Key.Key_Right, Qt.Key.Key_ScrollLock, Qt.Key.Key_Shift,
+    Qt.Key.Key_Space, Qt.Key.Key_Tab, Qt.Key.Key_Underscore, Qt.Key.Key_Up,
 ]
 
 
