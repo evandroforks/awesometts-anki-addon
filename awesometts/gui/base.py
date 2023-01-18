@@ -326,7 +326,7 @@ class ServiceDialog(Dialog):
 
         save = QtWidgets.QPushButton("Save")
         save.setObjectName('presets_save')
-        save.setFixedWidth(save.fontMetrics().width(save.text()) + 20)
+        save.setFixedWidth(save.fontMetrics().boundingRect(save.text()).width() + 20)
         save.setToolTip("Remember the selected service and its input\n"
                         "settings so that you can quickly access it later.")
         save.clicked.connect(self._on_preset_save)
