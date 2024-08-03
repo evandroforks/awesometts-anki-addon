@@ -414,15 +414,15 @@ class BrowserGenerator(ServiceDialog):
         if proc['handling']['append']:
             if proc['handling']['behavior']:
                 return self._addon.strip.sounds.univ(old_value).strip() + \
-                    ' [sound:%s]' % filename
+                    " <audio src=\"%s\" controlslist=\"nodownload\" controls=\"\"></audio>" % filename
             elif filename in old_value:
                 return old_value
             else:
-                return old_value + ' [sound:%s]' % filename
+                return old_value + " <audio src=\"%s\" controlslist=\"nodownload\" controls=\"\"></audio>" % filename
 
         else:
             if proc['handling']['behavior']:
-                return '[sound:%s]' % filename
+                return "<audio src=\"%s\" controlslist=\"nodownload\" controls=\"\"></audio>" % filename
             else:
                 return filename
 

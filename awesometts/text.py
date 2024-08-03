@@ -51,7 +51,7 @@ RE_LINEBREAK_HTML = re.compile(r'<\s*/?\s*(br|div|p)(\s+[^>]*)?\s*/?\s*>',
                                re.IGNORECASE)
 RE_NEWLINEISH = re.compile(r'(\r|\n|<\s*/?\s*(br|div|p)(\s+[^>]*)?\s*/?\s*>)+',
                            re.IGNORECASE)
-RE_SOUNDS = re.compile(r'\[sound:(.*?)\]')  # see also anki.sound._soundReg
+RE_SOUNDS = re.compile(r'\[sound:(.*?)\]|<audio src=\"(.*?)\".*?></audio>')  # see also anki.sound._soundReg
 RE_WHITESPACE = re.compile(r'[\0\s]+', re.UNICODE)
 
 STRIP_HTML = anki.utils.strip_html if hasattr(anki.utils, 'strip_html') else anki.utils.stripHTML  # this also converts character entities
